@@ -1,216 +1,118 @@
-# =============================================================================
-# =============================================================================
-# PROYECTO FINAL: SISTEMA AVANZADO DE CLASIFICACIÓN DE ESPECIES DE IRIS
-# Universidad de la Costa - Data Mining & Machine Learning
-# Desarrollado por: [Tu Nombre]
-# =============================================================================
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Proyecto de Clasificación de Especies de Iris
+Universidad de la Costa - Data Mining 2025
+Desarrollado por: Alexander Gutierrez
 
-# ||| IMPORTS ORDENADOS POR CATEGORÍA |||
-# ─────────────────────────────────────────────────────────────────────────────
+Este proyecto implementa un clasificador de especies de Iris utilizando Random Forest
+con optimización mediante GridSearchCV y visualizaciones interactivas en Streamlit.
+"""
 
-# 1. Built-in Python libraries
-import os
-import base64
-from typing import Tuple, Dict, Any
+# ===== IMPORTS ORDENADOS Y COMENTADOS =====
+import streamlit as st  # Framework web para dashboard interactivo
+import pandas as pd  # Manipulación de datos
+import numpy as np  # Operaciones numéricas
+import matplotlib.pyplot as plt  # Visualizaciones básicas
+import seaborn as sns  # Visualizaciones estadísticas avanzadas
+import plotly.express as px  # Visualizaciones interactivas
+import plotly.graph_objects as go  # Gráficos personalizados con Plotly
+from sklearn.datasets import load_iris  # Carga del dataset Iris
+from sklearn.model_selection import train_test_split, GridSearchCV  # División y optimización
+from sklearn.preprocessing import StandardScaler  # Normalización de características
+from sklearn.ensemble import RandomForestClassifier  # Modelo de clasificación
+from sklearn.pipeline import Pipeline  # Pipeline para flujo de trabajo ML
+from sklearn.metrics import (accuracy_score, precision_score, recall_score, 
+                           f1_score, confusion_matrix, classification_report)  # Métricas de evaluación
+from sklearn.decomposition import PCA  # Análisis de componentes principales
+import warnings  # Manejo de advertencias
+warnings.filterwarnings('ignore')  # Ignorar advertencias para mejor UX
 
-# 2. Core Data Science libraries
-import numpy as np
-import pandas as pd
-
-# 3. Machine Learning libraries
-from sklearn.datasets import load_iris
-from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score
-from sklearn.preprocessing import StandardScaler
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.pipeline import Pipeline
-from sklearn.decomposition import PCA
-from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
-
-# 4. Visualization libraries
-import matplotlib.pyplot as plt
-import seaborn as sns
-import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-
-# 5. Streamlit framework
-import streamlit as st
-
-# ||| CONFIGURACIÓN DE PÁGINA STREAMLIT - MANEJO DEFENSIVO |||
-# ─────────────────────────────────────────────────────────────────────────────
-# CRÍTICO: Debe ser el PRIMER comando Streamlit. Usamos try-except para
-# manejar recargas en Streamlit Cloud o ejecuciones múltiples que causarían error.
-try:
-    st.set_page_config(
-        page_title="🌺 Iris Classifier Pro - Universidad de la Costa",
-        page_icon="🌸",
-        layout="wide",
-        initial_sidebar_state="expanded",
-        initial_sidebar_width=350,
-        menu_items={
-            'Get Help': 'https://www.scikitlearn.org',
-            'Report a bug': None,
-            'About': "Sistema avanzado de clasificación de especies de Iris usando Random Forest optimizado"
-        }
-    )
-except Exception as e:
-    # Si ya está configurado o hay un error, continuar sin problema
-    # Esto previene el error: "set_page_config() can only be called once"
-    pass
-
-# ||| CSS PERSONALIZADO PARA UI/UX PREMIUM |||
-# ─────────────────────────────────────────────────────────────────────────────
-def load_css():
-    """Carga estilos CSS personalizados para una UI profesional"""
-    st.markdown("""
-    <style>
-    /* Header profesional */
-    .main-header {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 2rem;
-        border-radius: 15px;
-        color: white;
-        text-align: center;
-        margin-bottom: 2rem;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+# ===== CONFIGURACIÓN DE PÁGINA =====
+st.set_page_config(
+    page_title="🌸 Iris Classifier Pro",
+    page_icon="🌸",
+    layout="wide",
+    initial_sidebar_state="expanded",
+    menu_items={
+        'About': "Proyecto de Clasificación de Especies de Iris - Universidad de la Costa 2025"
     }
-    
-    /* Métricas cards */
-    .metric-card {
-        background: linear-gradient(45deg, #f093fb 0%, #f5576c 100%);
-        padding: 1rem;
-        border-radius: 10px;
-        color: white;
-        text-align: center;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-    }
-    
-    /* Sliders personalizados */
-    .stSlider > div > div > div > div {
-        background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
-    }
-    
-    /* Botón predict */
-    div.stButton > button {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        font-size: 18px;
-        font-weight: bold;
-        padding: 0.75rem 2rem;
-        border-radius: 10px;
-        border: none;
-        width: 100%;
-        transition: all 0.3s ease;
-    }
-    
-    div.stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
-    }
-    
-    /* Tabs personalizadas */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 10px;
-    }
-    
-    .stTabs [data-baseweb="tab"] {
-        background: #f0f2f6;
-        border-radius: 10px 10px 0 0;
-        padding: 10px 20px;
-        font-weight: 500;
-    }
-    
-    .stTabs [aria-selected="true"] {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+)
 
-# ||| SISTEMA DE CACHÉ AVANZADO |||
-# ─────────────────────────────────────────────────────────────────────────────
-
-@st.cache_data(ttl=3600, show_spinner=True)
-def load_and_explore_data() -> Tuple[pd.DataFrame, pd.Series]:
+# ===== SISTEMA DE CACHÉ AVANZADO =====
+@st.cache_data(ttl=3600)
+def load_and_explore_data():
     """
-    Carga y realiza análisis exploratorio inicial del dataset Iris.
+    Carga y explora el dataset Iris con estadísticas descriptivas.
+    Utiliza cache para optimizar performance (ttl=3600 segundos).
     
     Returns:
-        tuple: (features_dataframe, target_series)
+        tuple: (DataFrame de características, Series de etiquetas, datos sklearn)
     """
     # Cargar dataset de sklearn
     iris = load_iris()
     
-    # Crear DataFrame con nombres descriptivos
-    df_features = pd.DataFrame(
-        iris.data, 
-        columns=['Sepal Length (cm)', 'Sepal Width (cm)', 'Petal Length (cm)', 'Petal Width (cm)']
-    )
-    df_features['Species'] = iris.target_names[iris.target]
+    # Crear DataFrame con nombres de características
+    feature_names = ['Sepal Length', 'Sepal Width', 'Petal Length', 'Petal Width']
+    df = pd.DataFrame(iris.data, columns=feature_names)
+    df['Species'] = iris.target_names[iris.target]
     
-    # Crear series separadas para features y target
-    X = df_features.drop('Species', axis=1)
-    y = pd.Series(iris.target_names[iris.target], name='Species')
+    # Separar características y etiquetas
+    X = df[feature_names]
+    y = df['Species']
     
-    return X, y
+    return X, y, iris
 
-@st.cache_resource(show_spinner="🤖 Entrenando modelo optimizado Random Forest...")
-def create_ml_pipeline() -> Tuple[Pipeline, dict]:
+@st.cache_resource
+def create_ml_pipeline():
     """
-    Crea un pipeline completo de ML con preprocesamiento y modelo optimizado.
+    Crea pipeline ML completo con preprocesamiento y modelo Random Forest.
     
     Returns:
-        Tuple[Pipeline, dict]: Pipeline con StandardScaler y Random Forest + parámetros GridSearch
+        tuple: (Pipeline configurado, Grid de hiperparámetros)
     """
-    # Hiperparámetros para GridSearchCV (optimizados para el dataset Iris)
+    # Definir hiperparámetros para GridSearchCV
     param_grid = {
         'classifier__n_estimators': [50, 100, 200],
         'classifier__max_depth': [3, 5, 7, None],
         'classifier__min_samples_split': [2, 5, 10],
-        'classifier__min_samples_leaf': [1, 2, 4],
-        'classifier__class_weight': ['balanced', 'balanced_subsample', None]
+        'classifier__min_samples_leaf': [1, 2, 4]
     }
     
-    # Crear pipeline
+    # Crear pipeline con preprocesamiento y clasificador
     pipeline = Pipeline([
         ('scaler', StandardScaler()),
-        ('classifier', RandomForestClassifier(random_state=42, n_jobs=-1))
+        ('classifier', RandomForestClassifier(random_state=42))
     ])
     
     return pipeline, param_grid
 
-@st.cache_resource(show_spinner="⚡ Aplicando GridSearchCV con Cross-Validation...")
-def train_and_evaluate_model(pipeline: Pipeline, param_grid: dict, X: pd.DataFrame, y: pd.Series) -> Dict[str, Any]:
+def train_and_evaluate_model(pipeline, param_grid, X, y):
     """
-    Entrena el modelo con GridSearchCV y evalúa métricas de rendimiento.
+    Entrena y evalúa el modelo con GridSearchCV.
     
     Args:
-        pipeline: Pipeline de scikit-learn
-        param_grid: Diccionario de hiperparámetros para GridSearchCV
-        X: Features
-        y: Target
-    
+        pipeline: Pipeline de ML
+        param_grid: Grid de hiperparámetros
+        X: Características
+        y: Etiquetas
+        
     Returns:
-        dict: Contiene modelo entrenado, métricas y resultados
+        dict: Resultados de evaluación y modelo entrenado
     """
-    # Dividir datos (80/20) con estratificación
+    # Dividir datos
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=y
     )
     
-    # GridSearchCV con validación cruzada de 5 pliegues
+    # GridSearchCV para optimización
     grid_search = GridSearchCV(
-        pipeline,
-        param_grid,
-        cv=5,
-        scoring='accuracy',
-        n_jobs=-1,
-        verbose=0,
-        return_train_score=True
+        pipeline, param_grid, cv=5, scoring='accuracy', n_jobs=-1
     )
     
     # Entrenar modelo
-    grid_search.fit(X_train, y_train)
+    with st.spinner('🤖 Entrenando modelo con GridSearchCV...'):
+        grid_search.fit(X_train, y_train)
     
     # Mejor modelo
     best_model = grid_search.best_estimator_
@@ -218,124 +120,132 @@ def train_and_evaluate_model(pipeline: Pipeline, param_grid: dict, X: pd.DataFra
     # Predicciones
     y_pred = best_model.predict(X_test)
     
-    # Métricas detalladas
-    report = classification_report(y_test, y_pred, output_dict=True, zero_division=0)
+    # Calcular métricas
     metrics = {
-        'accuracy': report['accuracy'],
-        'precision': report['weighted avg']['precision'],
-        'recall': report['weighted avg']['recall'],
-        'f1_score': report['weighted avg']['f1-score']
-    }
-    
-    # Matriz de confusión
-    cm = confusion_matrix(y_test, y_pred, labels=['setosa', 'versicolor', 'virginica'])
-    
-    # Cross-validation scores
-    cv_scores = cross_val_score(best_model, X, y, cv=10, scoring='accuracy')
-    
-    return {
+        'accuracy': accuracy_score(y_test, y_pred),
+        'precision': precision_score(y_test, y_pred, average='weighted'),
+        'recall': recall_score(y_test, y_pred, average='weighted'),
+        'f1': f1_score(y_test, y_pred, average='weighted'),
+        'confusion_matrix': confusion_matrix(y_test, y_pred),
+        'classification_report': classification_report(y_test, y_pred),
+        'best_params': grid_search.best_params_,
+        'cv_score': grid_search.best_score_,
         'model': best_model,
-        'metrics': metrics,
-        'confusion_matrix': cm,
-        'cv_scores': cv_scores,
         'X_test': X_test,
         'y_test': y_test,
-        'grid_results': pd.DataFrame(grid_search.cv_results_)
+        'y_pred': y_pred
     }
+    
+    return metrics
 
-@st.cache_data
-def get_feature_importance(pipeline: Pipeline) -> pd.DataFrame:
+def get_feature_importance(pipeline):
     """
-    Extrae la importancia de características del modelo Random Forest.
+    Obtiene la importancia de las características del modelo entrenado.
     
     Args:
-        pipeline: Pipeline entrenado
-    
+        pipeline: Pipeline con modelo entrenado
+        
     Returns:
-        pd.DataFrame: Importancia de cada característica
+        pd.DataFrame: Importancia de características ordenadas
     """
-    # Obtener el clasificador del pipeline
-    rf_model = pipeline.named_steps['classifier']
-    
-    # Importancia de características
-    importance = rf_model.feature_importances_
+    # Obtener importancias del clasificador
+    importances = pipeline.named_steps['classifier'].feature_importances_
     feature_names = ['Sepal Length', 'Sepal Width', 'Petal Length', 'Petal Width']
     
     # Crear DataFrame ordenado
     importance_df = pd.DataFrame({
         'Feature': feature_names,
-        'Importance': importance
+        'Importance': importances
     }).sort_values('Importance', ascending=False)
     
     return importance_df
 
-@st.cache_data
-def create_3d_visualization(X: pd.DataFrame, y: pd.Series, new_sample: np.ndarray = None) -> go.Figure:
+def create_3d_visualization(data, target, new_sample=None):
     """
-    Crea visualización 3D interactiva usando PCA (captura 95% de varianza).
+    Crea visualización 3D interactiva con PCA.
     
     Args:
-        X: Features originales
-        y: Labels
+        data: Datos de características
+        target: Etiquetas de especies
         new_sample: Muestra nueva para visualizar (opcional)
-    
+        
     Returns:
-        plotly.graph_objects.Figure: Gráfico 3D interactivo
+        go.Figure: Figura de Plotly 3D
     """
-    # Aplicar PCA para reducir a 3 componentes (explica 95%+ de varianza en Iris)
-    pca = PCA(n_components=3, random_state=42)
-    X_pca = pca.fit_transform(X)
+    # Aplicar PCA para reducción dimensional
+    pca = PCA(n_components=3)
+    data_3d = pca.fit_transform(data)
     
     # Crear DataFrame para Plotly
-    pca_df = pd.DataFrame(X_pca, columns=['PC1', 'PC2', 'PC3'])
-    pca_df['Species'] = y.values
+    df_3d = pd.DataFrame(data_3d, columns=['PC1', 'PC2', 'PC3'])
+    df_3d['Species'] = target.values
+    
+    # Colores para cada especie
+    colors = {'setosa': '#FF6B6B', 'versicolor': '#4ECDC4', 'virginica': '#45B7D1'}
     
     # Crear figura 3D
-    fig = px.scatter_3d(
-        pca_df,
-        x='PC1',
-        y='PC2',
-        z='PC3',
-        color='Species',
-        title="Visualización 3D con PCA (95% varianza explicada)",
-        labels={'PC1': f'PC1 ({pca.explained_variance_ratio_[0]:.1%})',
-                'PC2': f'PC2 ({pca.explained_variance_ratio_[1]:.1%})',
-                'PC3': f'PC3 ({pca.explained_variance_ratio_[2]:.1%})'},
-        color_discrete_map={'setosa': '#FF6B6B', 'versicolor': '#4ECDC4', 'virginica': '#45B7D1'},
-        size_max=10,
-        opacity=0.8
-    )
+    fig = go.Figure()
     
-    # Si hay una nueva muestra, agregarla
-    if new_sample is not None:
-        new_sample_pca = pca.transform(new_sample.reshape(1, -1))
+    # Agregar puntos para cada especie
+    for species in df_3d['Species'].unique():
+        species_data = df_3d[df_3d['Species'] == species]
         fig.add_trace(go.Scatter3d(
-            x=[new_sample_pca[0][0]],
-            y=[new_sample_pca[0][1]],
-            z=[new_sample_pca[0][2]],
+            x=species_data['PC1'],
+            y=species_data['PC2'],
+            z=species_data['PC3'],
             mode='markers',
-            marker=dict(size=12, color='yellow', symbol='diamond', line=dict(width=2, color='black')),
-            name='Nueva Muestra',
-            text=['Nueva Muestra']
+            name=species,
+            marker=dict(
+                size=8,
+                color=colors[species],
+                opacity=0.8
+            ),
+            hovertemplate=f'<b>{species}</b><br>' +
+                         'PC1: %{x:.2f}<br>' +
+                         'PC2: %{y:.2f}<br>' +
+                         'PC3: %{z:.2f}<extra></extra>'
         ))
     
-    # Actualizar layout
+    # Si hay nueva muestra, agregarla
+    if new_sample is not None:
+        new_sample_3d = pca.transform(new_sample.reshape(1, -1))
+        fig.add_trace(go.Scatter3d(
+            x=[new_sample_3d[0, 0]],
+            y=[new_sample_3d[0, 1]],
+            z=[new_sample_3d[0, 2]],
+            mode='markers',
+            name='Nueva Muestra',
+            marker=dict(
+                size=15,
+                color='red',
+                symbol='diamond',
+                line=dict(width=2, color='darkred')
+            ),
+            hovertemplate='<b>Nueva Muestra</b><br>' +
+                         'PC1: %{x:.2f}<br>' +
+                         'PC2: %{y:.2f}<br>' +
+                         'PC3: %{z:.2f}<extra></extra>'
+        ))
+    
+    # Configurar layout
     fig.update_layout(
+        title='Visualización 3D con PCA (95% de varianza explicada)',
         scene=dict(
-            xaxis_title=f"PC1 ({pca.explained_variance_ratio_[0]:.1%} varianza)",
-            yaxis_title=f"PC2 ({pca.explained_variance_ratio_[1]:.1%} varianza)",
-            zaxis_title=f"PC3 ({pca.explained_variance_ratio_[2]:.1%} varianza)"
+            xaxis_title='PC1 (%.1f%%)' % (pca.explained_variance_ratio_[0] * 100),
+            yaxis_title='PC2 (%.1f%%)' % (pca.explained_variance_ratio_[1] * 100),
+            zaxis_title='PC3 (%.1f%%)' % (pca.explained_variance_ratio_[2] * 100),
+            bgcolor='rgba(0,0,0,0)'
         ),
-        legend=dict(x=0, y=0, bgcolor='rgba(255,255,255,0.8)'),
-        height=700
+        width=800,
+        height=600,
+        legend=dict(x=0.7, y=0.9)
     )
     
     return fig
 
-def predict_species(pipeline: Pipeline, sepal_length: float, sepal_width: float, 
-                    petal_length: float, petal_width: float) -> Tuple[str, Dict[str, float], np.ndarray]:
+def predict_species(pipeline, sepal_length, sepal_width, petal_length, petal_width):
     """
-    Realiza predicción de especie con probabilidades.
+    Predice la especie de iris basada en las características ingresadas.
     
     Args:
         pipeline: Modelo entrenado
@@ -343,332 +253,314 @@ def predict_species(pipeline: Pipeline, sepal_length: float, sepal_width: float,
         sepal_width: Ancho del sépalo
         petal_length: Longitud del pétalo
         petal_width: Ancho del pétalo
-    
+        
     Returns:
-        tuple: (especie_predicha, probabilidades, muestra)
+        tuple: (especie_predicha, probabilidades)
     """
     # Crear array de características
-    sample = np.array([[sepal_length, sepal_width, petal_length, petal_width]])
+    features = np.array([[sepal_length, sepal_width, petal_length, petal_width]])
     
-    # Realizar predicción
-    prediction = pipeline.predict(sample)[0]
+    # Predicción
+    prediction = pipeline.predict(features)[0]
     
-    # Obtener probabilidades
-    probabilities = pipeline.predict_proba(sample)[0]
-    prob_dict = dict(zip(pipeline.classes_, probabilities))
+    # Probabilidades (solo si el modelo las soporta)
+    try:
+        probabilities = pipeline.predict_proba(features)[0]
+        prob_dict = dict(zip(pipeline.classes_, probabilities))
+    except:
+        prob_dict = {prediction: 1.0}
     
-    return prediction, prob_dict, sample
+    return prediction, prob_dict
 
-# ||| LÓGICA PRINCIPAL DE LA APLICACIÓN |||
-# ─────────────────────────────────────────────────────────────────────────────
+# ===== LÓGICA PRINCIPAL =====
 def main():
-    """Función principal que ejecuta la aplicación Streamlit"""
+    # CSS personalizado para header profesional
+    st.markdown("""
+    <style>
+    .main-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 2rem;
+        border-radius: 10px;
+        color: white;
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    .metric-card {
+        background: #f8f9fa;
+        padding: 1rem;
+        border-radius: 8px;
+        border-left: 4px solid #667eea;
+    }
+    .prediction-result {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        padding: 2rem;
+        border-radius: 10px;
+        color: white;
+        text-align: center;
+        margin: 1rem 0;
+    }
+    </style>
+    """, unsafe_allow_html=True)
     
-    # Cargar CSS personalizado
-    load_css()
-    
-    # HEADER PROFESIONAL
+    # Header profesional
     st.markdown("""
     <div class="main-header">
-        <h1>🌸 Sistema Avanzado de Clasificación de Especies de Iris</h1>
-        <p>Proyecto Final - Universidad de la Costa | Data Mining & Machine Learning</p>
-        <p><strong>Modelo:</strong> Random Forest Optimizado con GridSearchCV | <strong>Dataset:</strong> Iris (150 muestras, 3 especies)</p>
+        <h1>🌸 Iris Classifier Pro</h1>
+        <h3>Machine Learning Avanzado con Random Forest</h3>
+        <p>Universidad de la Costa - Data Mining 2025</p>
     </div>
     """, unsafe_allow_html=True)
     
-    # SIDEBAR - CONTROLES DE PREDICCIÓN
-    # ─────────────────────────────────────────────────────────────────────────
-    st.sidebar.title("🔮 Panel de Control")
-    st.sidebar.markdown("### 🎚️ Ingrese las Características de la Flor")
+    # Cargar datos
+    X, y, iris = load_and_explore_data()
     
-    # Cargar datos para obtener rangos
-    X, y = load_and_explore_data()
+    # Sidebar con controles
+    st.sidebar.header("🎛️ Controles de Predicción")
     
-    # Sliders con valores mín/máx del dataset
-    with st.sidebar.form(key='prediction_form'):
+    # Sliders para características
+    with st.sidebar.form("prediction_form"):
+        st.write("### 🔬 Ingresa las características:")
+        
         sepal_length = st.slider(
-            "Sepal Length (cm)",
-            min_value=float(X['Sepal Length (cm)'].min()),
-            max_value=float(X['Sepal Length (cm)'].max()),
-            value=float(X['Sepal Length (cm)'].mean()),
-            step=0.1,
-            help="Longitud del sépalo en centímetros"
+            "Sepal Length (cm)", 
+            min_value=float(X['Sepal Length'].min()),
+            max_value=float(X['Sepal Length'].max()),
+            value=float(X['Sepal Length'].mean()),
+            step=0.1
         )
         
         sepal_width = st.slider(
-            "Sepal Width (cm)",
-            min_value=float(X['Sepal Width (cm)'].min()),
-            max_value=float(X['Sepal Width (cm)'].max()),
-            value=float(X['Sepal Width (cm)'].mean()),
-            step=0.1,
-            help="Ancho del sépalo en centímetros"
+            "Sepal Width (cm)", 
+            min_value=float(X['Sepal Width'].min()),
+            max_value=float(X['Sepal Width'].max()),
+            value=float(X['Sepal Width'].mean()),
+            step=0.1
         )
         
         petal_length = st.slider(
-            "Petal Length (cm)",
-            min_value=float(X['Petal Length (cm)'].min()),
-            max_value=float(X['Petal Length (cm)'].max()),
-            value=float(X['Petal Length (cm)'].mean()),
-            step=0.1,
-            help="Longitud del pétalo en centímetros"
+            "Petal Length (cm)", 
+            min_value=float(X['Petal Length'].min()),
+            max_value=float(X['Petal Length'].max()),
+            value=float(X['Petal Length'].mean()),
+            step=0.1
         )
         
         petal_width = st.slider(
-            "Petal Width (cm)",
-            min_value=float(X['Petal Width (cm)'].min()),
-            max_value=float(X['Petal Width (cm)'].max()),
-            value=float(X['Petal Width (cm)'].mean()),
-            step=0.1,
-            help="Ancho del pétalo en centímetros"
+            "Petal Width (cm)", 
+            min_value=float(X['Petal Width'].min()),
+            max_value=float(X['Petal Width'].max()),
+            value=float(X['Petal Width'].mean()),
+            step=0.1
         )
         
-        # Botón de predicción
-        submit_button = st.form_submit_button(label="🚀 Predecir Especie", use_container_width=True)
+        predict_button = st.form_submit_button("🚀 Predecir Especie", use_container_width=True)
     
-    # TABS PRINCIPALES
-    # ─────────────────────────────────────────────────────────────────────────
+    # Tabs principales
     tab1, tab2, tab3, tab4 = st.tabs(["📊 Dashboard", "🔬 Análisis Exploratorio", "🌍 Visualización 3D", "🔮 Predicción"])
     
-    # ENTRENAMIENTO DE MODELO (una sola vez)
-    # ─────────────────────────────────────────────────────────────────────────
-    if 'model_results' not in st.session_state:
-        with st.spinner('🤖 Entrenando modelo Random Forest con GridSearchCV...'):
-            pipeline, param_grid = create_ml_pipeline()
-            results = train_and_evaluate_model(pipeline, param_grid, X, y)
-            st.session_state['model_results'] = results
-            st.session_state['X'] = X
-            st.session_state['y'] = y
-            st.session_state['pipeline'] = results['model']
+    # Crear pipeline y entrenar modelo
+    pipeline, param_grid = create_ml_pipeline()
+    metrics = train_and_evaluate_model(pipeline, param_grid, X, y)
     
-    # Extraer resultados de session state
-    results = st.session_state['model_results']
-    pipeline = st.session_state['pipeline']
-    
-    # TAB 1: DASHBOARD
-    # ─────────────────────────────────────────────────────────────────────────
+    # TAB 1: Dashboard
     with tab1:
-        st.markdown("## 📊 Dashboard de Rendimiento del Modelo")
+        st.header("📊 Dashboard de Métricas")
         
-        # Métricas principales con st.metrics()
+        # Métricas principales con st.metrics
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            st.metric(
-                label="🎯 Accuracy",
-                value=f"{results['metrics']['accuracy']:.4f}",
-                delta=f"{results['metrics']['accuracy']*100:.2f}%"
-            )
-        
+            st.metric("🎯 Accuracy", f"{metrics['accuracy']:.3f}")
         with col2:
-            st.metric(
-                label="📍 Precision",
-                value=f"{results['metrics']['precision']:.4f}",
-                delta="Weighted Avg"
-            )
-        
+            st.metric("🎯 Precision", f"{metrics['precision']:.3f}")
         with col3:
-            st.metric(
-                label="🔄 Recall",
-                value=f"{results['metrics']['recall']:.4f}",
-                delta="Weighted Avg"
-            )
-        
+            st.metric("🎯 Recall", f"{metrics['recall']:.3f}")
         with col4:
-            st.metric(
-                label="⚖️ F1-Score",
-                value=f"{results['metrics']['f1_score']:.4f}",
-                delta="Weighted Avg"
-            )
+            st.metric("🎯 F1-Score", f"{metrics['f1']:.3f}")
         
         # Barras de progreso coloridas para métricas
-        st.markdown("### 📈 Visualización de Métricas")
+        st.write("### 📈 Barras de Progreso de Métricas")
+        
         metrics_cols = st.columns(4)
+        metric_names = ['Accuracy', 'Precision', 'Recall', 'F1']
+        metric_values = [metrics['accuracy'], metrics['precision'], 
+                        metrics['recall'], metrics['f1']]
+        colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4']
         
-        metrics = ['accuracy', 'precision', 'recall', 'f1_score']
-        colors = ['#4facfe', '#00f2fe', '#43e97b', '#38f9d7']
-        emojis = ['🎯', '📍', '🔄', '⚖️']
-        
-        for i, metric in enumerate(metrics):
+        for i, (name, value, color) in enumerate(zip(metric_names, metric_values, colors)):
             with metrics_cols[i]:
-                value = results['metrics'][metric]
                 st.markdown(f"""
                 <div class="metric-card">
-                    <h3>{emojis[i]} {metric.title()}</h3>
-                    <div style="background: rgba(255,255,255,0.3); border-radius: 10px; padding: 5px;">
-                        <div style="background: linear-gradient(90deg, {colors[i]} 0%, {colors[i]} {value*100}%, transparent {value*100}%); height: 30px; border-radius: 5px; display: flex; align-items: center; padding-left: 10px;">
-                            <strong>{value:.4f}</strong>
-                        </div>
-                    </div>
+                    <h4>{name}</h4>
+                    <div style="background-color: {color}; width: {value*100}%; height: 20px; 
+                         border-radius: 10px; margin: 10px 0;"></div>
+                    <p>{value:.1%}</p>
                 </div>
                 """, unsafe_allow_html=True)
         
         # Importancia de características
-        st.markdown("### 🏆 Importancia de Características")
-        importance_df = get_feature_importance(pipeline)
+        st.write("### 🎯 Importancia de Características")
+        importance_df = get_feature_importance(metrics['model'])
         
         fig_importance = px.bar(
-            importance_df,
-            x='Importance',
-            y='Feature',
-            orientation='h',
-            title='Importancia de Características - Random Forest',
-            color='Importance',
-            color_continuous_scale='viridis',
-            text='Importance'
+            importance_df, x='Importance', y='Feature',
+            orientation='h', title='Importancia de Características en Random Forest',
+            color='Importance', color_continuous_scale='viridis'
         )
-        fig_importance.update_traces(texttemplate='%{text:.3f}', textposition='outside')
-        fig_importance.update_layout(height=400, showlegend=False)
         st.plotly_chart(fig_importance, use_container_width=True)
         
-        # Matriz de confusión interactiva con Plotly
-        st.markdown("### 🔍 Matriz de Confusión Interactiva")
-        cm = results['confusion_matrix']
+        # Matriz de confusión interactiva
+        st.write("### 🔥 Matriz de Confusión")
+        cm = metrics['confusion_matrix']
         
         fig_cm = px.imshow(
-            cm,
-            text_auto=True,
-            aspect="auto",
-            color_continuous_scale='Blues',
-            title='Matriz de Confusión - Modelo Random Forest',
-            labels=dict(x="Predicción", y="Real", color="Count"),
+            cm, text_auto=True, aspect='auto',
             x=['Setosa', 'Versicolor', 'Virginica'],
-            y=['Setosa', 'Versicolor', 'Virginica']
+            y=['Setosa', 'Versicolor', 'Virginica'],
+            color_continuous_scale='Blues',
+            title='Matriz de Confusión - Modelo Random Forest'
         )
-        fig_cm.update_layout(height=500)
+        fig_cm.update_xaxes(title="Predicción")
+        fig_cm.update_yaxes(title="Real")
         st.plotly_chart(fig_cm, use_container_width=True)
         
-        # Cross-validation scores
-        st.markdown("### 📉 Cross-Validation Scores (10-fold)")
-        st.write(f"**Mean CV Accuracy:** {results['cv_scores'].mean():.4f} (±{results['cv_scores'].std():.4f})")
-        fig_cv = px.box(y=results['cv_scores'], title='Distribución de Accuracy en CV')
-        fig_cv.update_layout(yaxis_title='Accuracy', height=300)
-        st.plotly_chart(fig_cv, use_container_width=True)
+        # Mejores parámetros
+        st.write("### ⚙️ Mejores Hiperparámetros")
+        st.json(metrics['best_params'])
     
-    # TAB 2: ANÁLISIS EXPLORATORIO
-    # ─────────────────────────────────────────────────────────────────────────
+    # TAB 2: Análisis Exploratorio
     with tab2:
-        st.markdown("## 🔬 Análisis Exploratorio de Datos (EDA)")
+        st.header("🔬 Análisis Exploratorio de Datos")
         
         # Estadísticas descriptivas
-        st.markdown("### 📋 Estadísticas Descriptivas por Especie")
-        desc_stats = pd.concat([X, y], axis=1).groupby('Species').describe()
-        st.dataframe(desc_stats, use_container_width=True)
+        st.write("### 📊 Estadísticas Descriptivas")
+        st.dataframe(X.describe())
         
-        # Histogramas con distribuciones por clase
-        st.markdown("### 📊 Histogramas por Característica y Especie")
-        fig_hist = make_subplots(rows=2, cols=2, subplot_titles=X.columns.tolist())
+        # Crear DataFrame completo para visualizaciones
+        df_viz = X.copy()
+        df_viz['Species'] = y
         
-        for idx, feature in enumerate(X.columns):
-            row = (idx // 2) + 1
-            col = (idx % 2) + 1
-            
-            for species in y.unique():
-                data = X[y == species][feature]
-                fig_hist.add_trace(
-                    go.Histogram(x=data, name=species, opacity=0.7, nbinsx=15),
-                    row=row, col=col
-                )
-        
-        fig_hist.update_layout(height=600, barmode='overlay', showlegend=True)
+        # Histogramas por clase
+        st.write("### 📊 Distribuciones por Clase")
+        fig_hist = px.histogram(
+            df_viz.melt(id_vars=['Species'], var_name='Feature', value_name='Value'),
+            x='Value', color='Species', facet_col='Feature',
+            title='Histogramas de Características por Especie',
+            color_discrete_map={'setosa': '#FF6B6B', 'versicolor': '#4ECDC4', 'virginica': '#45B7D1'}
+        )
         st.plotly_chart(fig_hist, use_container_width=True)
         
-        # Scatter matrix (pairplot) con seaborn
-        st.markdown("### 🔗 Scatter Matrix (Pairplot)")
-        fig_pairplot = plt.figure(figsize=(12, 10))
-        pairplot_data = pd.concat([X, y], axis=1)
-        sns.pairplot(pairplot_data, hue='Species', diag_kind='kde', palette='Set2', markers=['o', 's', 'D'])
+        # Scatter matrix (pairplot)
+        st.write("### 🔍 Scatter Matrix (Pairplot)")
+        fig_pairplot = sns.pairplot(
+            df_viz, hue='Species', 
+            palette={'setosa': '#FF6B6B', 'versicolor': '#4ECDC4', 'virginica': '#45B7D1'}
+        )
         st.pyplot(fig_pairplot)
         
-        # Violin plots para distribuciones de características
-        st.markdown("### 🎻 Violin Plots - Distribución de Características")
-        fig_violin = make_subplots(rows=2, cols=2, subplot_titles=X.columns.tolist())
-        
-        for idx, feature in enumerate(X.columns):
-            row = (idx // 2) + 1
-            col = (idx % 2) + 1
-            
-            for species in y.unique():
-                data = X[y == species][feature]
-                fig_violin.add_trace(
-                    go.Violin(y=data, name=species, box_visible=True, meanline_visible=True, opacity=0.6),
-                    row=row, col=col
-                )
-        
-        fig_violin.update_layout(height=600, showlegend=False)
-        st.plotly_chart(fig_violin, use_container_width=True)
+        # Violin plots
+        st.write("### 🎻 Violin Plots - Distribuciones de Características")
+        for feature in X.columns:
+            fig_violin = px.violin(
+                df_viz, y=feature, color='Species',
+                title=f'Distribución de {feature} por Especie',
+                color_discrete_map={'setosa': '#FF6B6B', 'versicolor': '#4ECDC4', 'virginica': '#45B7D1'}
+            )
+            st.plotly_chart(fig_violin, use_container_width=True)
     
-    # TAB 3: VISUALIZACIÓN 3D
-    # ─────────────────────────────────────────────────────────────────────────
+    # TAB 3: Visualización 3D
     with tab3:
-        st.markdown("## 🌍 Visualización 3D con PCA")
-        st.info("ℹ️ **Nota Académica**: Se aplica PCA (Principal Component Analysis) para reducir las 4 dimensiones a 3 componentes principales que explican más del 95% de la varianza total. Esto permite visualizar la estructura del dataset en 3D.")
+        st.header("🌍 Visualización 3D con PCA")
         
-        # Crear y mostrar gráfico 3D
+        st.write("""
+        ### 🔬 Análisis de Componentes Principales (PCA)
+        
+        La visualización 3D utiliza PCA para reducir la dimensionalidad de las 4 características 
+        a 3 componentes principales, manteniendo el 95% de la varianza explicada del dataset original.
+        """
+        )
+        
+        # Crear visualización 3D
         fig_3d = create_3d_visualization(X, y)
         st.plotly_chart(fig_3d, use_container_width=True)
         
-        # Explicación de varianza
-        pca = PCA(n_components=3, random_state=42)
+        # Explicación de PCA
+        pca = PCA(n_components=3)
         pca.fit(X)
-        st.markdown("### 📊 Varianza Explicada por Componente")
-        var_df = pd.DataFrame({
-            'Componente Principal': ['PC1', 'PC2', 'PC3'],
-            'Varianza Explicada': pca.explained_variance_ratio_,
-            'Varianza Acumulada': np.cumsum(pca.explained_variance_ratio_)
-        })
-        st.dataframe(var_df, use_container_width=True)
         
-        st.success(f"✅ **Total de varianza explicada por 3 componentes: {pca.explained_variance_ratio_.sum():.2%}**")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write("### 📊 Varianza Explicada por Componente")
+            variance_df = pd.DataFrame({
+                'Componente': ['PC1', 'PC2', 'PC3'],
+                'Varianza (%)': pca.explained_variance_ratio_ * 100
+            })
+            st.dataframe(variance_df)
+        
+        with col2:
+            st.write("### 🎯 Varianza Total Explicada")
+            total_variance = sum(pca.explained_variance_ratio_) * 100
+            st.metric("Varianza Total", f"{total_variance:.1f}%")
     
-    # TAB 4: PREDICCIÓN
-    # ─────────────────────────────────────────────────────────────────────────
-    with tab4:
-        st.markdown("## 🔮 Resultado de Predicción")
-        
-        if submit_button:
-            with st.spinner('🤔 Realizando predicción...'):
-                # Realizar predicción
-                prediction, probabilities, sample = predict_species(
-                    pipeline, sepal_length, sepal_width, petal_length, petal_width
-                )
-                
-                # Mostrar resultado con emoji
-                species_emojis = {'setosa': '🌺', 'versicolor': '🌸', 'virginica': '🌼'}
-                st.markdown(f"""
-                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 2rem; border-radius: 15px; text-align: center; color: white;">
-                    <h2>{species_emojis.get(prediction, '🌿')} Especie Predicha: <strong>{prediction.title()}</strong></h2>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # Probabilidades
-                st.markdown("### 📊 Probabilidades por Clase")
-                prob_cols = st.columns(3)
-                for idx, (species, prob) in enumerate(probabilities.items()):
-                    prob_cols[idx].markdown(f"""
-                    <div style="background: rgba(102, 126, 234, 0.1); padding: 1rem; border-radius: 10px; text-align: center; border: 2px solid #667eea;">
-                        <h4>{species.title()}</h4>
-                        <h2 style="color: #667eea;">{prob:.2%}</h2>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                # Visualizar punto en gráfico 3D
-                st.markdown("### 🗺️ Ubicación en Espacio 3D (PCA)")
-                fig_3d_new = create_3d_visualization(X, y, new_sample=sample)
-                st.plotly_chart(fig_3d_new, use_container_width=True)
-                
-                # Características ingresadas
-                st.markdown("### 📝 Características Ingresadas")
-                input_df = pd.DataFrame([{
-                    'Sepal Length': sepal_length,
-                    'Sepal Width': sepal_width,
-                    'Petal Length': petal_length,
-                    'Petal Width': petal_width
-                }])
-                st.dataframe(input_df, use_container_width=True)
-        else:
-            st.info("👈 Por favor, ingrese las características en el panel izquierdo y presione 'Predecir Especie' para ver el resultado.")
+    # TAB 4: Predicción
+    if predict_button:
+        with tab4:
+            st.header("🔮 Resultado de Predicción")
+            
+            # Realizar predicción
+            prediction, probabilities = predict_species(
+                metrics['model'], sepal_length, sepal_width, petal_length, petal_width
+            )
+            
+            # Mostrar resultado con emoji
+            species_emojis = {
+                'setosa': '🌺',
+                'versicolor': '🌸',
+                'virginica': '🌼'
+            }
+            
+            st.markdown(f"""
+            <div class="prediction-result">
+                <h2>{species_emojis.get(prediction, '🌸')} Especie Predicha: {prediction.title()}</h2>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Probabilidades
+            st.write("### 📊 Probabilidades por Especie")
+            prob_df = pd.DataFrame(list(probabilities.items()), columns=['Especie', 'Probabilidad'])
+            prob_df['Probabilidad (%)'] = prob_df['Probabilidad'] * 100
+            
+            fig_prob = px.bar(
+                prob_df, x='Especie', y='Probabilidad',
+                title='Probabilidades de Clasificación',
+                color='Especie',
+                color_discrete_map={'setosa': '#FF6B6B', 'versicolor': '#4ECDC4', 'virginica': '#45B7D1'}
+            )
+            st.plotly_chart(fig_prob, use_container_width=True)
+            
+            # Mostrar valores ingresados
+            st.write("### 🔬 Características Ingresadas")
+            input_df = pd.DataFrame({
+                'Característica': ['Sepal Length', 'Sepal Width', 'Petal Length', 'Petal Width'],
+                'Valor (cm)': [sepal_length, sepal_width, petal_length, petal_width]
+            })
+            st.dataframe(input_df)
+            
+            # Visualizar nueva muestra en gráfico 3D
+            st.write("### 🌍 Nueva Muestra en Espacio 3D")
+            new_sample = np.array([[sepal_length, sepal_width, petal_length, petal_width]])
+            fig_3d_new = create_3d_visualization(X, y, new_sample)
+            st.plotly_chart(fig_3d_new, use_container_width=True)
+    
+    # Footer
+    st.markdown("---")
+    st.markdown("""
+    <div style="text-align: center; padding: 2rem;">
+        <h4>👨‍🎓 Alexander Gutierrez</h4>
+        <p><strong>Universidad de la Costa - Data Mining 2025</strong></p>
+        <p>Proyecto de Clasificación de Especies de Iris con Random Forest</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-# ||| PUNTO DE ENTRADA DE LA APLICACIÓN |||
-# ─────────────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     main()
