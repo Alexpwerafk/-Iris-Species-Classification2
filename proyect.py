@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 Proyecto de Clasificación de Especies de Iris
-Universidad de la Costa - Data Mining 2025
+Universidad de la Costa - Data Mining 2024
 Desarrollado por: Alexander Gutierrez
 
 Este proyecto implementa un clasificador de especies de Iris utilizando Random Forest
@@ -35,7 +35,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
     menu_items={
-        'About': "Proyecto de Clasificación de Especies de Iris - Universidad de la Costa 2025"
+        'About': "Proyecto de Clasificación de Especies de Iris - Universidad de la Costa 2024"
     }
 )
 
@@ -47,7 +47,7 @@ def load_and_explore_data():
     Utiliza cache para optimizar performance (ttl=3600 segundos).
     
     Returns:
-        tuple: (DataFrame de características, Series de etiquetas, datos sklearn)
+        tuple: (DataFrame de características, Series de etiquetas)
     """
     # Cargar dataset de sklearn
     iris = load_iris()
@@ -69,7 +69,7 @@ def create_ml_pipeline():
     Crea pipeline ML completo con preprocesamiento y modelo Random Forest.
     
     Returns:
-        tuple: (Pipeline configurado, Grid de hiperparámetros)
+        Pipeline: Pipeline configurado con StandardScaler y RandomForestClassifier
     """
     # Definir hiperparámetros para GridSearchCV
     param_grid = {
@@ -307,7 +307,7 @@ def main():
     <div class="main-header">
         <h1>🌸 Iris Classifier Pro</h1>
         <h3>Machine Learning Avanzado con Random Forest</h3>
-        <p>Universidad de la Costa - Data Mining 2025</p>
+        <p>Universidad de la Costa - Data Mining 2024</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -557,7 +557,7 @@ def main():
     st.markdown("""
     <div style="text-align: center; padding: 2rem;">
         <h4>👨‍🎓 Alexander Gutierrez</h4>
-        <p><strong>Universidad de la Costa - Data Mining 2025</strong></p>
+        <p><strong>Universidad de la Costa - Data Mining 2024</strong></p>
         <p>Proyecto de Clasificación de Especies de Iris con Random Forest</p>
     </div>
     """, unsafe_allow_html=True)
