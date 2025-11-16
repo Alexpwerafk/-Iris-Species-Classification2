@@ -1,4 +1,5 @@
 # =============================================================================
+# =============================================================================
 # PROYECTO FINAL: SISTEMA AVANZADO DE CLASIFICACIÓN DE ESPECIES DE IRIS
 # Universidad de la Costa - Data Mining & Machine Learning
 # Desarrollado por: [Tu Nombre]
@@ -35,20 +36,27 @@ from plotly.subplots import make_subplots
 # 5. Streamlit framework
 import streamlit as st
 
-# ||| CONFIGURACIÓN DE PÁGINA STREAMLIT |||
+# ||| CONFIGURACIÓN DE PÁGINA STREAMLIT - MANEJO DEFENSIVO |||
 # ─────────────────────────────────────────────────────────────────────────────
-st.set_page_config(
-    page_title="🌺 Iris Classifier Pro - Universidad de la Costa",
-    page_icon="🌸",
-    layout="wide",
-    initial_sidebar_state="expanded",
-    initial_sidebar_width=350,
-    menu_items={
-        'Get Help': 'https://www.scikitlearn.org',
-        'Report a bug': None,
-        'About': "Sistema avanzado de clasificación de especies de Iris usando Random Forest optimizado"
-    }
-)
+# CRÍTICO: Debe ser el PRIMER comando Streamlit. Usamos try-except para
+# manejar recargas en Streamlit Cloud o ejecuciones múltiples que causarían error.
+try:
+    st.set_page_config(
+        page_title="🌺 Iris Classifier Pro - Universidad de la Costa",
+        page_icon="🌸",
+        layout="wide",
+        initial_sidebar_state="expanded",
+        initial_sidebar_width=350,
+        menu_items={
+            'Get Help': 'https://www.scikitlearn.org',
+            'Report a bug': None,
+            'About': "Sistema avanzado de clasificación de especies de Iris usando Random Forest optimizado"
+        }
+    )
+except Exception as e:
+    # Si ya está configurado o hay un error, continuar sin problema
+    # Esto previene el error: "set_page_config() can only be called once"
+    pass
 
 # ||| CSS PERSONALIZADO PARA UI/UX PREMIUM |||
 # ─────────────────────────────────────────────────────────────────────────────
@@ -147,12 +155,12 @@ def load_and_explore_data() -> Tuple[pd.DataFrame, pd.Series]:
     return X, y
 
 @st.cache_resource(show_spinner="🤖 Entrenando modelo optimizado Random Forest...")
-def create_ml_pipeline() -> Pipeline:
+def create_ml_pipeline() -> Tuple[Pipeline, dict]:
     """
     Crea un pipeline completo de ML con preprocesamiento y modelo optimizado.
     
     Returns:
-        Pipeline: Pipeline con StandardScaler y Random Forest
+        Tuple[Pipeline, dict]: Pipeline con StandardScaler y Random Forest + parámetros GridSearch
     """
     # Hiperparámetros para GridSearchCV (optimizados para el dataset Iris)
     param_grid = {
@@ -178,7 +186,7 @@ def train_and_evaluate_model(pipeline: Pipeline, param_grid: dict, X: pd.DataFra
     
     Args:
         pipeline: Pipeline de scikit-learn
-        param_grid: Diccionario de hiperparámetros
+        param_grid: Diccionario de hiperparámetros para GridSearchCV
         X: Features
         y: Target
     
