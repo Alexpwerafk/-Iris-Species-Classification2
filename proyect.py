@@ -1,893 +1,666 @@
-import streamlit as st
-import pandas as pd
+# =============================================================================
+# PROYECTO FINAL: SISTEMA AVANZADO DE CLASIFICACIÓN DE ESPECIES DE IRIS
+# Universidad de la Costa - Data Mining & Machine Learning
+# Desarrollado por: [Tu Nombre]
+# =============================================================================
+
+# ||| IMPORTS ORDENADOS POR CATEGORÍA |||
+# ─────────────────────────────────────────────────────────────────────────────
+
+# 1. Built-in Python libraries
+import os
+import base64
+from typing import Tuple, Dict, Any
+
+# 2. Core Data Science libraries
 import numpy as np
+import pandas as pd
+
+# 3. Machine Learning libraries
+from sklearn.datasets import load_iris
+from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.pipeline import Pipeline
+from sklearn.decomposition import PCA
+from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
+
+# 4. Visualization libraries
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.datasets import load_iris
-from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
-from sklearn.preprocessing import StandardScaler, LabelEncoder
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.svm import SVC
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, classification_report, confusion_matrix
-from sklearn.decomposition import PCA
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import warnings
-warnings.filterwarnings('ignore')
 
-# Configuración de la página
+# 5. Streamlit framework
+import streamlit as st
+
+# ||| CONFIGURACIÓN DE PÁGINA STREAMLIT |||
+# ─────────────────────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Iris Classification Dashboard",
+    page_title="🌺 Iris Classifier Pro - Universidad de la Costa",
     page_icon="🌸",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
+    initial_sidebar_width=350,
+    menu_items={
+        'Get Help': 'https://www.scikitlearn.org',
+        'Report a bug': None,
+        'About': "Sistema avanzado de clasificación de especies de Iris usando Random Forest optimizado"
+    }
 )
 
-# Estilo personalizado
-st.markdown("""
+# ||| CSS PERSONALIZADO PARA UI/UX PREMIUM |||
+# ─────────────────────────────────────────────────────────────────────────────
+def load_css():
+    """Carga estilos CSS personalizados para una UI profesional"""
+    st.markdown("""
     <style>
+    /* Header profesional */
     .main-header {
-        font-size: 3rem;
-        color: #2E8B57;
-        text-align: center;
-        margin-bottom: 2rem;
-        font-weight: bold;
-    }
-    .sub-header {
-        font-size: 1.5rem;
-        color: #4682B4;
-        margin-bottom: 1rem;
-    }
-    .metric-card {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 1rem;
-        border-radius: 10px;
-        color: white;
-        text-align: center;
-        margin: 0.5rem;
-    }
-    .prediction-box {
-        background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
         padding: 2rem;
         border-radius: 15px;
         color: white;
         text-align: center;
-        margin: 1rem 0;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    }
+    
+    /* Métricas cards */
+    .metric-card {
+        background: linear-gradient(45deg, #f093fb 0%, #f5576c 100%);
+        padding: 1rem;
+        border-radius: 10px;
+        color: white;
+        text-align: center;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
+    
+    /* Sliders personalizados */
+    .stSlider > div > div > div > div {
+        background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
+    }
+    
+    /* Botón predict */
+    div.stButton > button {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        font-size: 18px;
+        font-weight: bold;
+        padding: 0.75rem 2rem;
+        border-radius: 10px;
+        border: none;
+        width: 100%;
+        transition: all 0.3s ease;
+    }
+    
+    div.stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+    }
+    
+    /* Tabs personalizadas */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 10px;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        background: #f0f2f6;
+        border-radius: 10px 10px 0 0;
+        padding: 10px 20px;
+        font-weight: 500;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white !important;
     }
     </style>
-""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
-# Título principal
-st.markdown('<div class="main-header">🌸 Iris Species Classification Dashboard</div>', unsafe_allow_html=True)
-st.markdown("""
-    <div style='text-align: center; font-size: 1.2rem; color: #666; margin-bottom: 2rem;'>
-        An end-to-end Data Mining Project for Iris flower species prediction
-    </div>
-""", unsafe_allow_html=True)
+# ||| SISTEMA DE CACHÉ AVANZADO |||
+# ─────────────────────────────────────────────────────────────────────────────
 
-# Cache para cargar datos
-@st.cache_data
-def load_and_prepare_data():
-    """Carga y prepara el dataset Iris"""
+@st.cache_data(ttl=3600, show_spinner=True)
+def load_and_explore_data() -> Tuple[pd.DataFrame, pd.Series]:
+    """
+    Carga y realiza análisis exploratorio inicial del dataset Iris.
+    
+    Returns:
+        tuple: (features_dataframe, target_series)
+    """
+    # Cargar dataset de sklearn
     iris = load_iris()
-    df = pd.DataFrame(iris.data, columns=iris.feature_names)
-    df['species'] = iris.target_names[iris.target]
-    df['species_id'] = iris.target
     
-    # Mapear nombres de columnas más amigables
-    column_mapping = {
-        'sepal length (cm)': 'Sepal Length',
-        'sepal width (cm)': 'Sepal Width', 
-        'petal length (cm)': 'Petal Length',
-        'petal width (cm)': 'Petal Width'
-    }
-    df = df.rename(columns=column_mapping)
+    # Crear DataFrame con nombres descriptivos
+    df_features = pd.DataFrame(
+        iris.data, 
+        columns=['Sepal Length (cm)', 'Sepal Width (cm)', 'Petal Length (cm)', 'Petal Width (cm)']
+    )
+    df_features['Species'] = iris.target_names[iris.target]
     
-    return df, iris
+    # Crear series separadas para features y target
+    X = df_features.drop('Species', axis=1)
+    y = pd.Series(iris.target_names[iris.target], name='Species')
+    
+    return X, y
 
-# Cache para entrenar modelos
-@st.cache_data
-def train_models(X_train, y_train):
-    """Entrena y evalúa múltiples modelos"""
-    models = {
-        'Random Forest': RandomForestClassifier(n_estimators=100, random_state=42),
-        'Support Vector Machine': SVC(kernel='rbf', probability=True, random_state=42),
-        'Logistic Regression': LogisticRegression(max_iter=1000, random_state=42)
+@st.cache_resource(show_spinner="🤖 Entrenando modelo optimizado Random Forest...")
+def create_ml_pipeline() -> Pipeline:
+    """
+    Crea un pipeline completo de ML con preprocesamiento y modelo optimizado.
+    
+    Returns:
+        Pipeline: Pipeline con StandardScaler y Random Forest
+    """
+    # Hiperparámetros para GridSearchCV (optimizados para el dataset Iris)
+    param_grid = {
+        'classifier__n_estimators': [50, 100, 200],
+        'classifier__max_depth': [3, 5, 7, None],
+        'classifier__min_samples_split': [2, 5, 10],
+        'classifier__min_samples_leaf': [1, 2, 4],
+        'classifier__class_weight': ['balanced', 'balanced_subsample', None]
     }
     
-    trained_models = {}
-    model_performance = {}
-    
-    for name, model in models.items():
-        # Entrenamiento
-        model.fit(X_train, y_train)
-        trained_models[name] = model
-        
-        # Validación cruzada
-        cv_scores = cross_val_score(model, X_train, y_train, cv=5, scoring='accuracy')
-        model_performance[name] = {
-            'cv_mean': cv_scores.mean(),
-            'cv_std': cv_scores.std()
-        }
-    
-    return trained_models, model_performance
-
-# Función principal
-def main():
-    # Cargar datos
-    df, iris = load_and_prepare_data()
-    
-    # Sidebar para navegación
-    st.sidebar.title("🧭 Navigation")
-    app_mode = st.sidebar.selectbox("Choose Section", [
-        "Project Overview",
-        "Data Understanding", 
-        "Data Preprocessing",
-        "Model Development",
-        "Interactive Prediction",
-        "Results & Conclusions"
+    # Crear pipeline
+    pipeline = Pipeline([
+        ('scaler', StandardScaler()),
+        ('classifier', RandomForestClassifier(random_state=42, n_jobs=-1))
     ])
     
-    # Información del dataset
-    st.sidebar.markdown("---")
-    st.sidebar.subheader("📊 Dataset Info")
-    st.sidebar.write(f"**Total Samples:** {len(df)}")
-    st.sidebar.write(f"**Features:** 4")
-    st.sidebar.write(f"**Classes:** 3")
-    st.sidebar.write(f"**Missing Values:** {df.isnull().sum().sum()}")
+    return pipeline, param_grid
+
+@st.cache_resource(show_spinner="⚡ Aplicando GridSearchCV con Cross-Validation...")
+def train_and_evaluate_model(pipeline: Pipeline, param_grid: dict, X: pd.DataFrame, y: pd.Series) -> Dict[str, Any]:
+    """
+    Entrena el modelo con GridSearchCV y evalúa métricas de rendimiento.
     
-    # Preparación de datos para modelado
-    X = df[['Sepal Length', 'Sepal Width', 'Petal Length', 'Petal Width']]
-    y = df['species_id']
+    Args:
+        pipeline: Pipeline de scikit-learn
+        param_grid: Diccionario de hiperparámetros
+        X: Features
+        y: Target
     
-    # Split de datos
+    Returns:
+        dict: Contiene modelo entrenado, métricas y resultados
+    """
+    # Dividir datos (80/20) con estratificación
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42, stratify=y
     )
     
-    # Escalado de características
-    scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
+    # GridSearchCV con validación cruzada de 5 pliegues
+    grid_search = GridSearchCV(
+        pipeline,
+        param_grid,
+        cv=5,
+        scoring='accuracy',
+        n_jobs=-1,
+        verbose=0,
+        return_train_score=True
+    )
     
-    # Entrenar modelos
-    trained_models, model_performance = train_models(X_train_scaled, y_train)
+    # Entrenar modelo
+    grid_search.fit(X_train, y_train)
     
-    # Seleccionar mejor modelo (Random Forest por simplicidad y rendimiento)
-    best_model = trained_models['Random Forest']
+    # Mejor modelo
+    best_model = grid_search.best_estimator_
     
-    # Predicciones del mejor modelo
-    y_pred = best_model.predict(X_test_scaled)
+    # Predicciones
+    y_pred = best_model.predict(X_test)
     
-    # Calcular métricas
-    accuracy = accuracy_score(y_test, y_pred)
-    precision = precision_score(y_test, y_pred, average='weighted')
-    recall = recall_score(y_test, y_pred, average='weighted')
-    f1 = f1_score(y_test, y_pred, average='weighted')
+    # Métricas detalladas
+    report = classification_report(y_test, y_pred, output_dict=True, zero_division=0)
+    metrics = {
+        'accuracy': report['accuracy'],
+        'precision': report['weighted avg']['precision'],
+        'recall': report['weighted avg']['recall'],
+        'f1_score': report['weighted avg']['f1-score']
+    }
     
-    if app_mode == "Project Overview":
-        show_project_overview()
+    # Matriz de confusión
+    cm = confusion_matrix(y_test, y_pred, labels=['setosa', 'versicolor', 'virginica'])
     
-    elif app_mode == "Data Understanding":
-        show_data_understanding(df)
+    # Cross-validation scores
+    cv_scores = cross_val_score(best_model, X, y, cv=10, scoring='accuracy')
     
-    elif app_mode == "Data Preprocessing":
-        show_data_preprocessing(df, X_train, X_test, scaler)
-    
-    elif app_mode == "Model Development":
-        show_model_development(trained_models, model_performance, X_test_scaled, y_test, iris)
-    
-    elif app_mode == "Interactive Prediction":
-        show_interactive_prediction(df, best_model, scaler, iris)
-    
-    elif app_mode == "Results & Conclusions":
-        show_results_conclusions(accuracy, precision, recall, f1, model_performance)
+    return {
+        'model': best_model,
+        'metrics': metrics,
+        'confusion_matrix': cm,
+        'cv_scores': cv_scores,
+        'X_test': X_test,
+        'y_test': y_test,
+        'grid_results': pd.DataFrame(grid_search.cv_results_)
+    }
 
-def show_project_overview():
-    """Muestra la descripción general del proyecto"""
-    st.markdown('<div class="sub-header">🎯 Project Overview & Objectives</div>', unsafe_allow_html=True)
+@st.cache_data
+def get_feature_importance(pipeline: Pipeline) -> pd.DataFrame:
+    """
+    Extrae la importancia de características del modelo Random Forest.
     
-    col1, col2 = st.columns([2, 1])
+    Args:
+        pipeline: Pipeline entrenado
     
-    with col1:
-        st.markdown("""
-        ### 📚 Learning Objectives
-        This project demonstrates the complete data mining pipeline through the classic Iris dataset:
-        
-        **a. Knowledge Integration** - Apply end-to-end data mining methodology
-        
-        **b. Independent Pipeline Execution** - Complete workflow: understanding → cleaning → modeling → evaluation  
-        
-        **c. Algorithm Selection & Justification** - Choose appropriate classification techniques
-        
-        **d. Results Communication** - Interactive dashboard for workflow and results visualization
-        
-        ### 🌸 Dataset Description
-        The Iris dataset contains **150 flower samples** with:
-        - **3 Species**: Iris setosa, Iris versicolor, Iris virginica
-        - **4 Features**: Sepal length, Sepal width, Petal length, Petal width
-        - **Goal**: Predict species based on morphological measurements
-        
-        ### 🛠️ Methodology
-        1. **Data Understanding & Exploration**
-        2. **Data Preprocessing & Feature Engineering**  
-        3. **Model Development & Training**
-        4. **Model Evaluation & Validation**
-        5. **Interactive Prediction System**
-        6. **Results Analysis & Conclusions**
-        """)
+    Returns:
+        pd.DataFrame: Importancia de cada característica
+    """
+    # Obtener el clasificador del pipeline
+    rf_model = pipeline.named_steps['classifier']
     
-    with col2:
-        st.markdown("### 🎨 Color Palette")
-        colors = ['#8B4513', '#FF6347', '#4169E1', '#32CD32', '#FFD700', '#FF69B4']
-        color_names = ['Sepal Brown', 'Tomato Red', 'Royal Blue', 'Lime Green', 'Gold', 'Hot Pink']
-        
-        for i, (color, name) in enumerate(zip(colors, color_names)):
-            st.markdown(f"""
-                <div style='background-color: {color}; padding: 10px; margin: 5px; 
-                           border-radius: 5px; text-align: center; color: white;'>
-                    {name}
-                </div>
-            """, unsafe_allow_html=True)
+    # Importancia de características
+    importance = rf_model.feature_importances_
+    feature_names = ['Sepal Length', 'Sepal Width', 'Petal Length', 'Petal Width']
+    
+    # Crear DataFrame ordenado
+    importance_df = pd.DataFrame({
+        'Feature': feature_names,
+        'Importance': importance
+    }).sort_values('Importance', ascending=False)
+    
+    return importance_df
 
-def show_data_understanding(df):
-    """Muestra el análisis exploratorio de datos"""
-    st.markdown('<div class="sub-header">📊 Data Understanding & Exploration</div>', unsafe_allow_html=True)
+@st.cache_data
+def create_3d_visualization(X: pd.DataFrame, y: pd.Series, new_sample: np.ndarray = None) -> go.Figure:
+    """
+    Crea visualización 3D interactiva usando PCA (captura 95% de varianza).
     
-    # Tabs para diferentes visualizaciones
-    tab1, tab2, tab3, tab4 = st.tabs(["Dataset Overview", "Statistical Summary", "Distributions", "Correlations"])
+    Args:
+        X: Features originales
+        y: Labels
+        new_sample: Muestra nueva para visualizar (opcional)
     
+    Returns:
+        plotly.graph_objects.Figure: Gráfico 3D interactivo
+    """
+    # Aplicar PCA para reducir a 3 componentes (explica 95%+ de varianza en Iris)
+    pca = PCA(n_components=3, random_state=42)
+    X_pca = pca.fit_transform(X)
+    
+    # Crear DataFrame para Plotly
+    pca_df = pd.DataFrame(X_pca, columns=['PC1', 'PC2', 'PC3'])
+    pca_df['Species'] = y.values
+    
+    # Crear figura 3D
+    fig = px.scatter_3d(
+        pca_df,
+        x='PC1',
+        y='PC2',
+        z='PC3',
+        color='Species',
+        title="Visualización 3D con PCA (95% varianza explicada)",
+        labels={'PC1': f'PC1 ({pca.explained_variance_ratio_[0]:.1%})',
+                'PC2': f'PC2 ({pca.explained_variance_ratio_[1]:.1%})',
+                'PC3': f'PC3 ({pca.explained_variance_ratio_[2]:.1%})'},
+        color_discrete_map={'setosa': '#FF6B6B', 'versicolor': '#4ECDC4', 'virginica': '#45B7D1'},
+        size_max=10,
+        opacity=0.8
+    )
+    
+    # Si hay una nueva muestra, agregarla
+    if new_sample is not None:
+        new_sample_pca = pca.transform(new_sample.reshape(1, -1))
+        fig.add_trace(go.Scatter3d(
+            x=[new_sample_pca[0][0]],
+            y=[new_sample_pca[0][1]],
+            z=[new_sample_pca[0][2]],
+            mode='markers',
+            marker=dict(size=12, color='yellow', symbol='diamond', line=dict(width=2, color='black')),
+            name='Nueva Muestra',
+            text=['Nueva Muestra']
+        ))
+    
+    # Actualizar layout
+    fig.update_layout(
+        scene=dict(
+            xaxis_title=f"PC1 ({pca.explained_variance_ratio_[0]:.1%} varianza)",
+            yaxis_title=f"PC2 ({pca.explained_variance_ratio_[1]:.1%} varianza)",
+            zaxis_title=f"PC3 ({pca.explained_variance_ratio_[2]:.1%} varianza)"
+        ),
+        legend=dict(x=0, y=0, bgcolor='rgba(255,255,255,0.8)'),
+        height=700
+    )
+    
+    return fig
+
+def predict_species(pipeline: Pipeline, sepal_length: float, sepal_width: float, 
+                    petal_length: float, petal_width: float) -> Tuple[str, Dict[str, float], np.ndarray]:
+    """
+    Realiza predicción de especie con probabilidades.
+    
+    Args:
+        pipeline: Modelo entrenado
+        sepal_length: Longitud del sépalo
+        sepal_width: Ancho del sépalo
+        petal_length: Longitud del pétalo
+        petal_width: Ancho del pétalo
+    
+    Returns:
+        tuple: (especie_predicha, probabilidades, muestra)
+    """
+    # Crear array de características
+    sample = np.array([[sepal_length, sepal_width, petal_length, petal_width]])
+    
+    # Realizar predicción
+    prediction = pipeline.predict(sample)[0]
+    
+    # Obtener probabilidades
+    probabilities = pipeline.predict_proba(sample)[0]
+    prob_dict = dict(zip(pipeline.classes_, probabilities))
+    
+    return prediction, prob_dict, sample
+
+# ||| LÓGICA PRINCIPAL DE LA APLICACIÓN |||
+# ─────────────────────────────────────────────────────────────────────────────
+def main():
+    """Función principal que ejecuta la aplicación Streamlit"""
+    
+    # Cargar CSS personalizado
+    load_css()
+    
+    # HEADER PROFESIONAL
+    st.markdown("""
+    <div class="main-header">
+        <h1>🌸 Sistema Avanzado de Clasificación de Especies de Iris</h1>
+        <p>Proyecto Final - Universidad de la Costa | Data Mining & Machine Learning</p>
+        <p><strong>Modelo:</strong> Random Forest Optimizado con GridSearchCV | <strong>Dataset:</strong> Iris (150 muestras, 3 especies)</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # SIDEBAR - CONTROLES DE PREDICCIÓN
+    # ─────────────────────────────────────────────────────────────────────────
+    st.sidebar.title("🔮 Panel de Control")
+    st.sidebar.markdown("### 🎚️ Ingrese las Características de la Flor")
+    
+    # Cargar datos para obtener rangos
+    X, y = load_and_explore_data()
+    
+    # Sliders con valores mín/máx del dataset
+    with st.sidebar.form(key='prediction_form'):
+        sepal_length = st.slider(
+            "Sepal Length (cm)",
+            min_value=float(X['Sepal Length (cm)'].min()),
+            max_value=float(X['Sepal Length (cm)'].max()),
+            value=float(X['Sepal Length (cm)'].mean()),
+            step=0.1,
+            help="Longitud del sépalo en centímetros"
+        )
+        
+        sepal_width = st.slider(
+            "Sepal Width (cm)",
+            min_value=float(X['Sepal Width (cm)'].min()),
+            max_value=float(X['Sepal Width (cm)'].max()),
+            value=float(X['Sepal Width (cm)'].mean()),
+            step=0.1,
+            help="Ancho del sépalo en centímetros"
+        )
+        
+        petal_length = st.slider(
+            "Petal Length (cm)",
+            min_value=float(X['Petal Length (cm)'].min()),
+            max_value=float(X['Petal Length (cm)'].max()),
+            value=float(X['Petal Length (cm)'].mean()),
+            step=0.1,
+            help="Longitud del pétalo en centímetros"
+        )
+        
+        petal_width = st.slider(
+            "Petal Width (cm)",
+            min_value=float(X['Petal Width (cm)'].min()),
+            max_value=float(X['Petal Width (cm)'].max()),
+            value=float(X['Petal Width (cm)'].mean()),
+            step=0.1,
+            help="Ancho del pétalo en centímetros"
+        )
+        
+        # Botón de predicción
+        submit_button = st.form_submit_button(label="🚀 Predecir Especie", use_container_width=True)
+    
+    # TABS PRINCIPALES
+    # ─────────────────────────────────────────────────────────────────────────
+    tab1, tab2, tab3, tab4 = st.tabs(["📊 Dashboard", "🔬 Análisis Exploratorio", "🌍 Visualización 3D", "🔮 Predicción"])
+    
+    # ENTRENAMIENTO DE MODELO (una sola vez)
+    # ─────────────────────────────────────────────────────────────────────────
+    if 'model_results' not in st.session_state:
+        with st.spinner('🤖 Entrenando modelo Random Forest con GridSearchCV...'):
+            pipeline, param_grid = create_ml_pipeline()
+            results = train_and_evaluate_model(pipeline, param_grid, X, y)
+            st.session_state['model_results'] = results
+            st.session_state['X'] = X
+            st.session_state['y'] = y
+            st.session_state['pipeline'] = results['model']
+    
+    # Extraer resultados de session state
+    results = st.session_state['model_results']
+    pipeline = st.session_state['pipeline']
+    
+    # TAB 1: DASHBOARD
+    # ─────────────────────────────────────────────────────────────────────────
     with tab1:
-        st.markdown("### 🔍 Dataset Overview")
-        st.write("First 10 rows of the dataset:")
-        st.dataframe(df.head(10), use_container_width=True)
+        st.markdown("## 📊 Dashboard de Rendimiento del Modelo")
         
-        col1, col2 = st.columns(2)
+        # Métricas principales con st.metrics()
+        col1, col2, col3, col4 = st.columns(4)
+        
         with col1:
-            st.markdown("**Dataset Shape:**")
-            st.write(f"Rows: {df.shape[0]}")
-            st.write(f"Columns: {df.shape[1]}")
-            st.write(f"Features: 4")
-            st.write(f"Target: 1 (species)")
-            
+            st.metric(
+                label="🎯 Accuracy",
+                value=f"{results['metrics']['accuracy']:.4f}",
+                delta=f"{results['metrics']['accuracy']*100:.2f}%"
+            )
+        
         with col2:
-            st.markdown("**Data Quality:**")
-            st.write(f"Missing Values: {df.isnull().sum().sum()}")
-            st.write(f"Duplicate Rows: {df.duplicated().sum()}")
-            st.write(f"Data Types: {df.dtypes.value_counts().sum()} numeric")
-    
-    with tab2:
-        st.markdown("### 📈 Statistical Summary")
-        st.write("**Descriptive Statistics for Numerical Features:**")
-        st.dataframe(df.describe(), use_container_width=True)
+            st.metric(
+                label="📍 Precision",
+                value=f"{results['metrics']['precision']:.4f}",
+                delta="Weighted Avg"
+            )
         
-        st.markdown("### 🏷️ Species Distribution")
-        species_counts = df['species'].value_counts()
-        st.write(species_counts)
+        with col3:
+            st.metric(
+                label="🔄 Recall",
+                value=f"{results['metrics']['recall']:.4f}",
+                delta="Weighted Avg"
+            )
         
-        # Gráfico de distribución de especies
-        fig_species = px.bar(
-            x=species_counts.index, 
-            y=species_counts.values,
-            title="Species Distribution in Dataset",
-            labels={'x': 'Species', 'y': 'Count'},
-            color=species_counts.values,
-            color_continuous_scale='viridis'
+        with col4:
+            st.metric(
+                label="⚖️ F1-Score",
+                value=f"{results['metrics']['f1_score']:.4f}",
+                delta="Weighted Avg"
+            )
+        
+        # Barras de progreso coloridas para métricas
+        st.markdown("### 📈 Visualización de Métricas")
+        metrics_cols = st.columns(4)
+        
+        metrics = ['accuracy', 'precision', 'recall', 'f1_score']
+        colors = ['#4facfe', '#00f2fe', '#43e97b', '#38f9d7']
+        emojis = ['🎯', '📍', '🔄', '⚖️']
+        
+        for i, metric in enumerate(metrics):
+            with metrics_cols[i]:
+                value = results['metrics'][metric]
+                st.markdown(f"""
+                <div class="metric-card">
+                    <h3>{emojis[i]} {metric.title()}</h3>
+                    <div style="background: rgba(255,255,255,0.3); border-radius: 10px; padding: 5px;">
+                        <div style="background: linear-gradient(90deg, {colors[i]} 0%, {colors[i]} {value*100}%, transparent {value*100}%); height: 30px; border-radius: 5px; display: flex; align-items: center; padding-left: 10px;">
+                            <strong>{value:.4f}</strong>
+                        </div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+        
+        # Importancia de características
+        st.markdown("### 🏆 Importancia de Características")
+        importance_df = get_feature_importance(pipeline)
+        
+        fig_importance = px.bar(
+            importance_df,
+            x='Importance',
+            y='Feature',
+            orientation='h',
+            title='Importancia de Características - Random Forest',
+            color='Importance',
+            color_continuous_scale='viridis',
+            text='Importance'
         )
-        st.plotly_chart(fig_species, use_container_width=True)
-    
-    with tab3:
-        st.markdown("### 📊 Feature Distributions")
+        fig_importance.update_traces(texttemplate='%{text:.3f}', textposition='outside')
+        fig_importance.update_layout(height=400, showlegend=False)
+        st.plotly_chart(fig_importance, use_container_width=True)
         
-        # Histogramas para cada característica
-        features = ['Sepal Length', 'Sepal Width', 'Petal Length', 'Petal Width']
-        
-        fig_hist = make_subplots(
-            rows=2, cols=2,
-            subplot_titles=features,
-            horizontal_spacing=0.1,
-            vertical_spacing=0.1
-        )
-        
-        for i, feature in enumerate(features):
-            row = i // 2 + 1
-            col = i % 2 + 1
-            
-            for species in df['species'].unique():
-                data = df[df['species'] == species][feature]
-                fig_hist.add_trace(
-                    go.Histogram(
-                        x=data,
-                        name=species,
-                        opacity=0.7,
-                        nbinsx=15
-                    ),
-                    row=row, col=col
-                )
-        
-        fig_hist.update_layout(
-            height=600,
-            title_text="Feature Distributions by Species",
-            showlegend=True
-        )
-        st.plotly_chart(fig_hist, use_container_width=True)
-    
-    with tab4:
-        st.markdown("### 🔗 Feature Correlations")
-        
-        # Matriz de correlación
-        corr_matrix = df[['Sepal Length', 'Sepal Width', 'Petal Length', 'Petal Width']].corr()
-        
-        fig_corr = px.imshow(
-            corr_matrix,
-            text_auto=True,
-            aspect="auto",
-            color_continuous_scale='RdBu_r',
-            title="Feature Correlation Matrix"
-        )
-        st.plotly_chart(fig_corr, use_container_width=True)
-        
-        st.markdown("**Correlation Insights:**")
-        st.write("🔴 **Strong Positive Correlation (0.96):** Petal Length ↔ Petal Width")
-        st.write("🔴 **Moderate Positive Correlation (0.87):** Sepal Length ↔ Petal Length")
-        st.write("🔴 **Moderate Positive Correlation (0.82):** Sepal Length ↔ Petal Width")
-        st.write("🟡 **Weak Negative Correlation (-0.43):** Sepal Width ↔ Petal Length")
-
-def show_data_preprocessing(df, X_train, X_test, scaler):
-    """Muestra el proceso de preprocesamiento"""
-    st.markdown('<div class="sub-header">🔧 Data Preprocessing Pipeline</div>', unsafe_allow_html=True)
-    
-    col1, col2 = st.columns([1, 1])
-    
-    with col1:
-        st.markdown("### 📋 Preprocessing Steps")
-        
-        st.markdown("""
-        **1. Data Quality Assessment**
-        - ✅ No missing values detected
-        - ✅ No duplicate records found
-        - ✅ All features are numerical
-        
-        **2. Feature Engineering**
-        - No additional features needed
-        - Original 4 features are discriminative
-        
-        **3. Data Splitting**
-        - Training Set: 80% (120 samples)
-        - Test Set: 20% (30 samples)
-        - Stratified split to maintain class balance
-        
-        **4. Feature Scaling**
-        - StandardScaler applied
-        - Mean normalization (μ=0, σ=1)
-        - Prevents feature dominance
-        """)
-    
-    with col2:
-        st.markdown("### 📊 Before vs After Scaling")
-        
-        # Comparar datos originales vs escalados
-        features = ['Sepal Length', 'Sepal Width', 'Petal Length', 'Petal Width']
-        
-        # Datos originales
-        original_stats = X_train[features].describe()
-        
-        # Datos escalados
-        scaled_stats = pd.DataFrame(scaler.fit_transform(X_train[features]), columns=features).describe()
-        
-        tab1, tab2 = st.tabs(["Original Data", "Scaled Data"])
-        
-        with tab1:
-            st.write("**Original Feature Statistics:**")
-            st.dataframe(original_stats, use_container_width=True)
-        
-        with tab2:
-            st.write("**Scaled Feature Statistics:**")
-            st.dataframe(scaled_stats, use_container_width=True)
-    
-    st.markdown("---")
-    
-    st.markdown("### 🎯 Preprocessing Justification")
-    
-    col_a, col_b = st.columns(2)
-    
-    with col_a:
-        st.markdown("""
-        **Why StandardScaler?**
-        - Different measurement units (cm)
-        - Varying feature ranges
-        - Improves algorithm convergence
-        - Essential for SVM and Logistic Regression
-        
-        **Stratified Split Benefits**
-        - Maintains class distribution
-        - Prevents sampling bias
-        - Ensures representative test set
-        """)
-    
-    with col_b:
-        st.markdown("""
-        **Data Quality Validation**
-        - No outliers requiring treatment
-        - Balanced class distribution
-        - Sufficient sample size per class
-        - Clear feature separability
-        
-        **Pipeline Efficiency**
-        - Minimal preprocessing needed
-        - High-quality original dataset
-        - Ready for direct modeling
-        """)
-
-def show_model_development(trained_models, model_performance, X_test_scaled, y_test, iris):
-    """Muestra el desarrollo y evaluación del modelo"""
-    st.markdown('<div class="sub-header">🤖 Model Development & Evaluation</div>', unsafe_allow_html=True)
-    
-    # Selección del modelo
-    st.markdown("### 🎯 Model Selection Process")
-    
-    col1, col2 = st.columns([1, 1])
-    
-    with col1:
-        st.markdown("**Algorithm Comparison (Cross-Validation):**")
-        
-        # Crear DataFrame de comparación
-        comparison_data = []
-        for model_name, perf in model_performance.items():
-            comparison_data.append({
-                'Model': model_name,
-                'CV Mean Accuracy': f"{perf['cv_mean']:.4f}",
-                'CV Std Dev': f"{perf['cv_std']:.4f}",
-                'Performance': 'Excellent' if perf['cv_mean'] > 0.95 else 'Good'
-            })
-        
-        comparison_df = pd.DataFrame(comparison_data)
-        st.dataframe(comparison_df, use_container_width=True)
-    
-    with col2:
-        st.markdown("**Model Selection Criteria:**")
-        st.markdown("""
-        ✅ **Random Forest (Selected)**
-        - Highest CV accuracy: 95.8%
-        - Low variance: ±2.1%
-        - Handles non-linear patterns
-        - Feature importance insights
-        - Robust to overfitting
-        
-        🥈 **SVM Alternative**
-        - Good accuracy: 94.2%
-        - Excellent generalization
-        - More complex tuning
-        
-        🥉 **Logistic Regression**
-        - Simple and interpretable
-        - Linear decision boundaries
-        - Lower accuracy: 92.5%
-        """)
-    
-    st.markdown("---")
-    
-    # Evaluación del modelo seleccionado
-    st.markdown("### 📊 Final Model Evaluation")
-    
-    best_model = trained_models['Random Forest']
-    y_pred = best_model.predict(X_test_scaled)
-    
-    col_a, col_b = st.columns([1, 1])
-    
-    with col_a:
-        st.markdown("**Performance Metrics:**")
-        
-        accuracy = accuracy_score(y_test, y_pred)
-        precision = precision_score(y_test, y_pred, average='weighted')
-        recall = recall_score(y_test, y_pred, average='weighted')
-        f1 = f1_score(y_test, y_pred, average='weighted')
-        
-        metrics_data = {
-            'Metric': ['Accuracy', 'Precision', 'Recall', 'F1-Score'],
-            'Score': [accuracy, precision, recall, f1],
-            'Interpretation': [
-                'Excellent - Model predicts correctly most of the time',
-                'Excellent - Low false positive rate',
-                'Excellent - High true positive rate', 
-                'Excellent - Balanced precision and recall'
-            ]
-        }
-        
-        metrics_df = pd.DataFrame(metrics_data)
-        st.dataframe(metrics_df, use_container_width=True)
-    
-    with col_b:
-        st.markdown("**Confusion Matrix:**")
-        cm = confusion_matrix(y_test, y_pred)
+        # Matriz de confusión interactiva con Plotly
+        st.markdown("### 🔍 Matriz de Confusión Interactiva")
+        cm = results['confusion_matrix']
         
         fig_cm = px.imshow(
             cm,
             text_auto=True,
             aspect="auto",
             color_continuous_scale='Blues',
-            title="Confusion Matrix - Test Set",
-            x=iris.target_names,
-            y=iris.target_names
+            title='Matriz de Confusión - Modelo Random Forest',
+            labels=dict(x="Predicción", y="Real", color="Count"),
+            x=['Setosa', 'Versicolor', 'Virginica'],
+            y=['Setosa', 'Versicolor', 'Virginica']
         )
-        fig_cm.update_layout(
-            xaxis_title="Predicted",
-            yaxis_title="Actual"
-        )
+        fig_cm.update_layout(height=500)
         st.plotly_chart(fig_cm, use_container_width=True)
-    
-    st.markdown("---")
-    
-    # Feature Importance
-    st.markdown("### 🔍 Feature Importance Analysis")
-    
-    feature_importance = pd.DataFrame({
-        'Feature': ['Sepal Length', 'Sepal Width', 'Petal Length', 'Petal Width'],
-        'Importance': best_model.feature_importances_
-    }).sort_values('Importance', ascending=True)
-    
-    col_x, col_y = st.columns([1, 1])
-    
-    with col_x:
-        fig_importance = px.bar(
-            feature_importance,
-            x='Importance',
-            y='Feature',
-            orientation='h',
-            title='Feature Importance in Random Forest',
-            color='Importance',
-            color_continuous_scale='viridis'
-        )
-        st.plotly_chart(fig_importance, use_container_width=True)
-    
-    with col_y:
-        st.markdown("**Key Insights:**")
-        st.markdown(f"""
-        🏆 **Most Important Feature:**
-        **Petal Width** ({feature_importance.iloc[-1]['Importance']:.3f})
         
-        📊 **Feature Ranking:**
-        1. Petal Width: {feature_importance.iloc[-1]['Importance']:.3f}
-        2. Petal Length: {feature_importance.iloc[-2]['Importance']:.3f}  
-        3. Sepal Length: {feature_importance.iloc[-3]['Importance']:.3f}
-        4. Sepal Width: {feature_importance.iloc[-4]['Importance']:.3f}
+        # Cross-validation scores
+        st.markdown("### 📉 Cross-Validation Scores (10-fold)")
+        st.write(f"**Mean CV Accuracy:** {results['cv_scores'].mean():.4f} (±{results['cv_scores'].std():.4f})")
+        fig_cv = px.box(y=results['cv_scores'], title='Distribución de Accuracy en CV')
+        fig_cv.update_layout(yaxis_title='Accuracy', height=300)
+        st.plotly_chart(fig_cv, use_container_width=True)
+    
+    # TAB 2: ANÁLISIS EXPLORATORIO
+    # ─────────────────────────────────────────────────────────────────────────
+    with tab2:
+        st.markdown("## 🔬 Análisis Exploratorio de Datos (EDA)")
         
-        💡 **Implications:**
-        - Petal measurements are most discriminative
-        - Sepal width has minimal predictive power
-        - Focus on petal features for species identification
-        """)
-
-def show_interactive_prediction(df, best_model, scaler, iris):
-    """Muestra el panel interactivo de predicción"""
-    st.markdown('<div class="sub-header">🎮 Interactive Prediction Panel</div>', unsafe_allow_html=True)
-    
-    st.markdown("### 📝 Enter Flower Measurements")
-    
-    col1, col2 = st.columns([1, 1])
-    
-    with col1:
-        sepal_length = st.slider(
-            "Sepal Length (cm)", 
-            min_value=4.0, max_value=8.0, value=5.8, step=0.1,
-            help="Length of the sepal in centimeters"
-        )
+        # Estadísticas descriptivas
+        st.markdown("### 📋 Estadísticas Descriptivas por Especie")
+        desc_stats = pd.concat([X, y], axis=1).groupby('Species').describe()
+        st.dataframe(desc_stats, use_container_width=True)
         
-        sepal_width = st.slider(
-            "Sepal Width (cm)", 
-            min_value=2.0, max_value=4.5, value=3.0, step=0.1,
-            help="Width of the sepal in centimeters"
-        )
-    
-    with col2:
-        petal_length = st.slider(
-            "Petal Length (cm)", 
-            min_value=1.0, max_value=7.0, value=4.3, step=0.1,
-            help="Length of the petal in centimeters"
-        )
+        # Histogramas con distribuciones por clase
+        st.markdown("### 📊 Histogramas por Característica y Especie")
+        fig_hist = make_subplots(rows=2, cols=2, subplot_titles=X.columns.tolist())
         
-        petal_width = st.slider(
-            "Petal Width (cm)", 
-            min_value=0.1, max_value=2.5, value=1.2, step=0.1,
-            help="Width of the petal in centimeters"
-        )
+        for idx, feature in enumerate(X.columns):
+            row = (idx // 2) + 1
+            col = (idx % 2) + 1
+            
+            for species in y.unique():
+                data = X[y == species][feature]
+                fig_hist.add_trace(
+                    go.Histogram(x=data, name=species, opacity=0.7, nbinsx=15),
+                    row=row, col=col
+                )
+        
+        fig_hist.update_layout(height=600, barmode='overlay', showlegend=True)
+        st.plotly_chart(fig_hist, use_container_width=True)
+        
+        # Scatter matrix (pairplot) con seaborn
+        st.markdown("### 🔗 Scatter Matrix (Pairplot)")
+        fig_pairplot = plt.figure(figsize=(12, 10))
+        pairplot_data = pd.concat([X, y], axis=1)
+        sns.pairplot(pairplot_data, hue='Species', diag_kind='kde', palette='Set2', markers=['o', 's', 'D'])
+        st.pyplot(fig_pairplot)
+        
+        # Violin plots para distribuciones de características
+        st.markdown("### 🎻 Violin Plots - Distribución de Características")
+        fig_violin = make_subplots(rows=2, cols=2, subplot_titles=X.columns.tolist())
+        
+        for idx, feature in enumerate(X.columns):
+            row = (idx // 2) + 1
+            col = (idx % 2) + 1
+            
+            for species in y.unique():
+                data = X[y == species][feature]
+                fig_violin.add_trace(
+                    go.Violin(y=data, name=species, box_visible=True, meanline_visible=True, opacity=0.6),
+                    row=row, col=col
+                )
+        
+        fig_violin.update_layout(height=600, showlegend=False)
+        st.plotly_chart(fig_violin, use_container_width=True)
     
-    # Realizar predicción
-    input_data = np.array([[sepal_length, sepal_width, petal_length, petal_width]])
-    input_scaled = scaler.transform(input_data)
+    # TAB 3: VISUALIZACIÓN 3D
+    # ─────────────────────────────────────────────────────────────────────────
+    with tab3:
+        st.markdown("## 🌍 Visualización 3D con PCA")
+        st.info("ℹ️ **Nota Académica**: Se aplica PCA (Principal Component Analysis) para reducir las 4 dimensiones a 3 componentes principales que explican más del 95% de la varianza total. Esto permite visualizar la estructura del dataset en 3D.")
+        
+        # Crear y mostrar gráfico 3D
+        fig_3d = create_3d_visualization(X, y)
+        st.plotly_chart(fig_3d, use_container_width=True)
+        
+        # Explicación de varianza
+        pca = PCA(n_components=3, random_state=42)
+        pca.fit(X)
+        st.markdown("### 📊 Varianza Explicada por Componente")
+        var_df = pd.DataFrame({
+            'Componente Principal': ['PC1', 'PC2', 'PC3'],
+            'Varianza Explicada': pca.explained_variance_ratio_,
+            'Varianza Acumulada': np.cumsum(pca.explained_variance_ratio_)
+        })
+        st.dataframe(var_df, use_container_width=True)
+        
+        st.success(f"✅ **Total de varianza explicada por 3 componentes: {pca.explained_variance_ratio_.sum():.2%}**")
     
-    prediction = best_model.predict(input_scaled)[0]
-    prediction_proba = best_model.predict_proba(input_scaled)[0]
-    
-    predicted_species = iris.target_names[prediction]
-    
-    # Mostrar resultado
-    st.markdown("---")
-    
-    st.markdown(f"""
-    <div class="prediction-box">
-        <h2>🌸 Predicted Species: {predicted_species.upper()}</h2>
-        <p style="font-size: 1.2rem;">Confidence: {prediction_proba[prediction]:.1%}</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    # Probabilidades de cada clase
-    st.markdown("### 📊 Prediction Probabilities")
-    
-    prob_df = pd.DataFrame({
-        'Species': iris.target_names,
-        'Probability': prediction_proba,
-        'Color': ['#FF6B6B', '#4ECDC4', '#45B7D1']
-    })
-    
-    fig_prob = px.bar(
-        prob_df,
-        x='Species',
-        y='Probability',
-        color='Species',
-        color_discrete_sequence=prob_df['Color'].tolist(),
-        title=f"Prediction Probabilities for {predicted_species}",
-        text=[f'{p:.1%}' for p in prediction_proba]
-    )
-    fig_prob.update_layout(yaxis_title="Probability", showlegend=False)
-    st.plotly_chart(fig_prob, use_container_width=True)
-    
-    # Visualización 3D
-    st.markdown("### 🌐 3D Visualization")
-    
-    # PCA para visualización 3D
-    features = ['Sepal Length', 'Sepal Width', 'Petal Length', 'Petal Width']
-    X = df[features]
-    y = df['species_id']
-    
-    pca = PCA(n_components=3)
-    X_pca = pca.fit_transform(X)
-    
-    # Transformar el nuevo punto
-    new_point_pca = pca.transform(input_data)
-    
-    fig_3d = go.Figure()
-    
-    # Agregar puntos del dataset
-    colors = ['#FF6B6B', '#4ECDC4', '#45B7D1']
-    for i, species in enumerate(iris.target_names):
-        mask = y == i
-        fig_3d.add_trace(go.Scatter3d(
-            x=X_pca[mask, 0],
-            y=X_pca[mask, 1],
-            z=X_pca[mask, 2],
-            mode='markers',
-            name=species,
-            marker=dict(
-                size=5,
-                color=colors[i],
-                opacity=0.7
-            )
-        ))
-    
-    # Agregar el nuevo punto
-    fig_3d.add_trace(go.Scatter3d(
-        x=[new_point_pca[0, 0]],
-        y=[new_point_pca[0, 1]],
-        z=[new_point_pca[0, 2]],
-        mode='markers',
-        name='New Sample',
-        marker=dict(
-            size=15,
-            color='yellow',
-            symbol='diamond',
-            line=dict(width=3, color='black')
-        )
-    ))
-    
-    fig_3d.update_layout(
-        title=f"3D PCA Visualization - New Sample Location ({predicted_species})",
-        scene=dict(
-            xaxis_title=f"PC1 ({pca.explained_variance_ratio_[0]:.1%} variance)",
-            yaxis_title=f"PC2 ({pca.explained_variance_ratio_[1]:.1%} variance)",
-            zaxis_title=f"PC3 ({pca.explained_variance_ratio_[2]:.1%} variance)"
-        ),
-        width=800,
-        height=600
-    )
-    
-    st.plotly_chart(fig_3d, use_container_width=True)
-    
-    # Información adicional
-    st.markdown("### 🔍 Additional Information")
-    
-    col_a, col_b = st.columns([1, 1])
-    
-    with col_a:
-        st.markdown("**Feature Values Entered:**")
-        st.write(f"- Sepal Length: {sepal_length} cm")
-        st.write(f"- Sepal Width: {sepal_width} cm")
-        st.write(f"- Petal Length: {petal_length} cm")
-        st.write(f"- Petal Width: {petal_width} cm")
-    
-    with col_b:
-        st.markdown("**Model Confidence Analysis:**")
-        max_prob = max(prediction_proba)
-        if max_prob > 0.8:
-            st.write("✅ **High Confidence** - Reliable prediction")
-        elif max_prob > 0.6:
-            st.write("🟡 **Medium Confidence** - Consider additional features")
+    # TAB 4: PREDICCIÓN
+    # ─────────────────────────────────────────────────────────────────────────
+    with tab4:
+        st.markdown("## 🔮 Resultado de Predicción")
+        
+        if submit_button:
+            with st.spinner('🤔 Realizando predicción...'):
+                # Realizar predicción
+                prediction, probabilities, sample = predict_species(
+                    pipeline, sepal_length, sepal_width, petal_length, petal_width
+                )
+                
+                # Mostrar resultado con emoji
+                species_emojis = {'setosa': '🌺', 'versicolor': '🌸', 'virginica': '🌼'}
+                st.markdown(f"""
+                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 2rem; border-radius: 15px; text-align: center; color: white;">
+                    <h2>{species_emojis.get(prediction, '🌿')} Especie Predicha: <strong>{prediction.title()}</strong></h2>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Probabilidades
+                st.markdown("### 📊 Probabilidades por Clase")
+                prob_cols = st.columns(3)
+                for idx, (species, prob) in enumerate(probabilities.items()):
+                    prob_cols[idx].markdown(f"""
+                    <div style="background: rgba(102, 126, 234, 0.1); padding: 1rem; border-radius: 10px; text-align: center; border: 2px solid #667eea;">
+                        <h4>{species.title()}</h4>
+                        <h2 style="color: #667eea;">{prob:.2%}</h2>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                # Visualizar punto en gráfico 3D
+                st.markdown("### 🗺️ Ubicación en Espacio 3D (PCA)")
+                fig_3d_new = create_3d_visualization(X, y, new_sample=sample)
+                st.plotly_chart(fig_3d_new, use_container_width=True)
+                
+                # Características ingresadas
+                st.markdown("### 📝 Características Ingresadas")
+                input_df = pd.DataFrame([{
+                    'Sepal Length': sepal_length,
+                    'Sepal Width': sepal_width,
+                    'Petal Length': petal_length,
+                    'Petal Width': petal_width
+                }])
+                st.dataframe(input_df, use_container_width=True)
         else:
-            st.write("⚠️ **Low Confidence** - Prediction uncertain")
-        
-        st.write(f"**Top 2 Species:**")
-        sorted_indices = np.argsort(prediction_proba)[::-1]
-        for i, idx in enumerate(sorted_indices[:2]):
-            st.write(f"{i+1}. {iris.target_names[idx]}: {prediction_proba[idx]:.1%}")
+            st.info("👈 Por favor, ingrese las características en el panel izquierdo y presione 'Predecir Especie' para ver el resultado.")
 
-def show_results_conclusions(accuracy, precision, recall, f1, model_performance):
-    """Muestra los resultados y conclusiones"""
-    st.markdown('<div class="sub-header">📈 Results & Conclusions</div>', unsafe_allow_html=True)
-    
-    # Métricas principales
-    st.markdown("### 🎯 Key Performance Metrics")
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.markdown(f"""
-        <div class="metric-card">
-            <h3>Accuracy</h3>
-            <h2>{accuracy:.1%}</h2>
-            <p>Excellent</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown(f"""
-        <div class="metric-card">
-            <h3>Precision</h3>
-            <h2>{precision:.1%}</h2>
-            <p>Excellent</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col3:
-        st.markdown(f"""
-        <div class="metric-card">
-            <h3>Recall</h3>
-            <h2>{recall:.1%}</h2>
-            <p>Excellent</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col4:
-        st.markdown(f"""
-        <div class="metric-card">
-            <h3>F1-Score</h3>
-            <h2>{f1:.1%}</h2>
-            <p>Excellent</p>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    st.markdown("---")
-    
-    # Conclusiones principales
-    st.markdown("### ✅ Key Achievements")
-    
-    col_a, col_b = st.columns([1, 1])
-    
-    with col_a:
-        st.markdown("""
-        **🎯 Model Performance**
-        - Achieved 96.7% accuracy on test set
-        - Excellent precision and recall balance
-        - Robust cross-validation results
-        - Minimal overfitting observed
-        
-        **🔍 Feature Insights**
-        - Petal measurements are most discriminative
-        - Petal width alone captures 44% of variance
-        - Clear species separation possible
-        - Minimal feature redundancy
-        """)
-    
-    with col_b:
-        st.markdown("""
-        **🛠️ Technical Success**
-        - Complete data mining pipeline implemented
-        - Cross-validation ensures robust evaluation
-        - Feature scaling improves convergence
-        - Multiple algorithms compared and validated
-        
-        **🎮 Interactive Dashboard**
-        - Real-time prediction capability
-        - 3D visualization of sample positioning
-        - Probability-based confidence measures
-        - User-friendly interface design
-        """)
-    
-    st.markdown("---")
-    
-    # Metodología
-    st.markdown("### 📋 Methodology Review")
-    
-    st.markdown("""
-    **1. Data Understanding**
-    - Exploratory Data Analysis (EDA)
-    - Statistical summary and distributions
-    - Correlation analysis between features
-    - Species distribution validation
-    
-    **2. Data Preprocessing** 
-    - Quality assessment (no missing values)
-    - Train-test stratified split (80/20)
-    - StandardScaler normalization
-    - Feature importance analysis
-    
-    **3. Model Development**
-    - Algorithm comparison (RF, SVM, Logistic Regression)
-    - 5-fold cross-validation
-    - Random Forest selected (95.8% CV accuracy)
-    - Hyperparameter optimization
-    
-    **4. Model Evaluation**
-    - Multiple metrics: Accuracy, Precision, Recall, F1
-    - Confusion matrix analysis
-    - Cross-validation robustness
-    - Feature importance interpretation
-    
-    **5. Interactive Dashboard**
-    - Real-time prediction interface
-    - 3D PCA visualization
-    - Probability-based confidence
-    - Comprehensive result communication
-    """)
-    
-    st.markdown("---")
-    
-    # Recomendaciones
-    st.markdown("### 💡 Recommendations & Next Steps")
-    
-    col_x, col_y = st.columns([1, 1])
-    
-    with col_x:
-        st.markdown("""
-        **🚀 Model Improvements**
-        - Hyperparameter tuning with GridSearchCV
-        - Ensemble methods (VotingClassifier)
-        - Feature engineering (ratios, combinations)
-        - Deep learning approaches (Neural Networks)
-        
-        **📊 Data Enhancement**
-        - Collect more samples per species
-        - Add environmental features (climate, soil)
-        - Include seasonal variation data
-        - Geographic origin information
-        """)
-    
-    with col_y:
-        st.markdown("""
-        **🎯 Business Applications**
-        - Botanical garden automation
-        - Plant identification apps
-        - Educational tools for students
-        - Research data validation
-        
-        **🔧 Technical Extensions**
-        - Deploy as REST API
-        - Mobile app integration
-        - Real-time image recognition
-        - Batch processing capabilities
-        """)
-    
-    # Footer
-    st.markdown("---")
-    st.markdown("""
-    <div style='text-align: center; padding: 2rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                border-radius: 10px; color: white;'>
-        <h2>🌸 Project Successfully Completed! 🌸</h2>
-        <p style='font-size: 1.2rem;'>Complete data mining pipeline implemented with excellent results</p>
-        <p>Ready for production deployment and real-world applications</p>
-    </div>
-    """, unsafe_allow_html=True)
-
+# ||| PUNTO DE ENTRADA DE LA APLICACIÓN |||
+# ─────────────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     main()
